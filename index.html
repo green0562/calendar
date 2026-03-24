@@ -204,16 +204,23 @@ async function init() {
   const year = today.getFullYear();
   const month = today.getMonth();
 
-  // 今月
-  appDiv.appendChild(createMonth(year, month, holidays));
-
-  // 翌月（年またぎ対応）
-  const nextMonthDate = new Date(year, month + 1, 1);
+  // 前月
+  const prev = new Date(year, month - 1, 1);
   appDiv.appendChild(
-    createMonth(nextMonthDate.getFullYear(), nextMonthDate.getMonth(), holidays)
+    createMonth(prev.getFullYear(), prev.getMonth(), holidays)
+  );
+
+  // 今月
+  appDiv.appendChild(
+    createMonth(year, month, holidays)
+  );
+
+  // 翌月
+  const next = new Date(year, month + 1, 1);
+  appDiv.appendChild(
+    createMonth(next.getFullYear(), next.getMonth(), holidays)
   );
 }
-
 init();
 </script>
 
