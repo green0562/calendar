@@ -204,21 +204,21 @@ async function init() {
   const year = today.getFullYear();
   const month = today.getMonth();
 
-  // 前月
-  const prev = new Date(year, month - 1, 1);
-  appDiv.appendChild(
-    createMonth(prev.getFullYear(), prev.getMonth(), holidays)
-  );
-
   // 今月
   appDiv.appendChild(
     createMonth(year, month, holidays)
   );
 
   // 翌月
-  const next = new Date(year, month + 1, 1);
+  const next1 = new Date(year, month + 1, 1);
   appDiv.appendChild(
-    createMonth(next.getFullYear(), next.getMonth(), holidays)
+    createMonth(next1.getFullYear(), next1.getMonth(), holidays)
+  );
+
+  // 翌々月
+  const next2 = new Date(year, month + 2, 1);
+  appDiv.appendChild(
+    createMonth(next2.getFullYear(), next2.getMonth(), holidays)
   );
 }
 init();
