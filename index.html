@@ -64,7 +64,7 @@ button {
 
 <body>
 
-<h2>参加希望カレンダー（2026年4月〜5月）</h2>
+<h2>参加希望カレンダー</h2>
 <div id="app"></div>
 
 <script type="module">
@@ -82,6 +82,7 @@ const db = getFirestore(app);
 
 const appDiv = document.getElementById("app");
 
+// ローカル日付生成（ズレ防止）
 function formatDateLocal(date) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -89,6 +90,7 @@ function formatDateLocal(date) {
   return `${y}-${m}-${d}`;
 }
 
+// 祝日取得
 async function getHolidays() {
   const res = await fetch("https://holidays-jp.github.io/api/v1/date.json");
   return await res.json();
@@ -97,17 +99,14 @@ async function getHolidays() {
 function createMonth(year, month, holidays) {
   const container = document.createElement("div");
 
-  // タイトル
   const title = document.createElement("div");
   title.className = "month-title";
   title.textContent = `${year}年${month + 1}月`;
   container.appendChild(title);
 
-  // カレンダー
   const cal = document.createElement("div");
   cal.className = "calendar";
 
-  // 曜日ヘッダー
   ["月","火","水","木","金","土","日"].forEach(d => {
     const div = document.createElement("div");
     div.className = "header";
@@ -118,26 +117,25 @@ function createMonth(year, month, holidays) {
   const firstDay = new Date(year, month, 1);
   const lastDate = new Date(year, month + 1, 0).getDate();
 
-  // 空白（前）
-  let startOffset = (firstDay.getDay() + 6) % 7;
-  for (let i = 0; i < startOffset; i++) {
+  // 月初のズレ補正（月曜始まり）
+  let offset = (firstDay.getDay() + 6) % 7;
+  for (let i = 0; i < offset; i++) {
     const empty = document.createElement("div");
     empty.className = "day empty";
     cal.appendChild(empty);
   }
 
-  // 日付
   for (let i = 1; i <= lastDate; i++) {
     const d = new Date(year, month, i);
     const key = formatDateLocal(d);
     const day = d.getDay();
 
-    const div = document.createElement("div");
-    div.className = "day";
-
     const isSun = day === 0;
     const isSat = day === 6;
     const isHoliday = holidays[key];
+
+    const div = document.createElement("div");
+    div.className = "day";
 
     if (isHoliday) {
       div.classList.add("holiday");
@@ -202,8 +200,18 @@ window.addName = async function(key) {
 async function init() {
   const holidays = await getHolidays();
 
-  appDiv.appendChild(createMonth(2026, 3, holidays)); // 4月
-  appDiv.appendChild(createMonth(2026, 4, holidays)); // 5月
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = today.getMonth();
+
+  // 今月
+  appDiv.appendChild(createMonth(year, month, holidays));
+
+  // 翌月（年またぎ対応）
+  const nextMonthDate = new Date(year, month + 1, 1);
+  appDiv.appendChild(
+    createMonth(nextMonthDate.getFullYear(), nextMonthDate.getMonth(), holidays)
+  );
 }
 
 init();
