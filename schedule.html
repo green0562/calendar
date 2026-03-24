@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>参加希望カレンダー</title>
+
+<style>
+body { font-family: sans-serif; margin: 10px; }
+.calendar { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+.day { border: 1px solid #ccc; border-radius: 8px; padding: 8px; min-height: 90px; }
+.date { font-size: 12px; font-weight: bold; }
+.names span { display:block; font-size:12px; margin-top:2px; background:#e0f0ff; border-radius:4px; padding:2px; }
+button { margin-top:5px; width:100%; }
+</style>
+</head>
+
+<body>
+<h2>参加希望カレンダー</h2>
+<div id="calendar" class="calendar"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
+import { getFirestore, doc, setDoc, updateDoc, onSnapshot, getDoc, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAeqz0DS20ux7MWpmXrQA5x3rZ4KysrET8",
+  authDomain: "triangle-29fbf.firebaseapp.com",
+  projectId: "triangle-29fbf",
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+const calendar = document.getElementById("calendar");
+
+function createCalendar() {
+  const today = new Date();
+
+  for (let i = 0; i < 60; i++) {
+    const d = new Date();
+    d.setDate(today.getDate() + i);
+    const key = d.toISOString().split('T')[0];
+
+    const div = document.createElement("div");
+    div.className = "day";
+
+    div.innerHTML = `
+      <div class="date">${key}</div>
+      <div class="names" id="names-${key}"></div>
+      <button onclick="addName('${key}')">＋参加</button>
+    `;
+
+    calendar.appendChild(div);
+
+    onSnapshot(doc(db, "dates", key), (docSnap) => {
+      const container = document.getElementById("names-" + key);
+      container.innerHTML = "";
+
+      if (docSnap.exists()) {
+        const names = docSnap.data().names || [];
+
+        names.forEach(name => {
+          const span = document.createElement("span");
+          span.textContent = name;
+
+          span.onclick = async () => {
+            if (confirm(name + " を削除しますか？")) {
+              await updateDoc(doc(db, "dates", key), {
+                names: arrayRemove(name)
+              });
+            }
+          };
+
+          container.appendChild(span);
+        });
+      }
+    });
+  }
+}
+
+window.addName = async function(key) {
+  const name = prompt("名前を入力してください");
+  if (!name) return;
+
+  const ref = doc(db, "dates", key);
+  const docSnap = await getDoc(ref);
+
+  if (docSnap.exists() && docSnap.data().names?.includes(name)) {
+    alert("すでに登録されています");
+    return;
+  }
+
+  await setDoc(ref, {
+    names: arrayUnion(name)
+  }, { merge: true });
+};
+
+createCalendar();
+</script>
+
+</body>
+</html>
