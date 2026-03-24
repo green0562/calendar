@@ -82,7 +82,17 @@ const db = getFirestore(app);
 
 const appDiv = document.getElementById("app");
 
-// ローカル日付生成（ズレ防止）
+// 👇 自分の名前を保存（最初だけ入力）
+let myName = localStorage.getItem("myName");
+
+if (!myName) {
+  myName = prompt("最初にあなたの名前を入力してください");
+  if (myName) {
+    localStorage.setItem("myName", myName);
+  }
+}
+
+// 日付フォーマット（ズレ防止）
 function formatDateLocal(date) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -117,7 +127,6 @@ function createMonth(year, month, holidays) {
   const firstDay = new Date(year, month, 1);
   const lastDate = new Date(year, month + 1, 0).getDate();
 
-  // 月初のズレ補正（月曜始まり）
   let offset = (firstDay.getDay() + 6) % 7;
   for (let i = 0; i < offset; i++) {
     const empty = document.createElement("div");
@@ -162,7 +171,13 @@ function createMonth(year, month, holidays) {
           const span = document.createElement("span");
           span.textContent = name;
 
+          // 👇 自分の名前だけ削除可能
           span.onclick = async () => {
+            if (name !== myName) {
+              alert("自分の名前だけ削除できます");
+              return;
+            }
+
             if (confirm("削除しますか？")) {
               await updateDoc(doc(db, "dates", key), {
                 names: arrayRemove(name)
@@ -205,9 +220,7 @@ async function init() {
   const month = today.getMonth();
 
   // 今月
-  appDiv.appendChild(
-    createMonth(year, month, holidays)
-  );
+  appDiv.appendChild(createMonth(year, month, holidays));
 
   // 翌月
   const next1 = new Date(year, month + 1, 1);
@@ -221,6 +234,7 @@ async function init() {
     createMonth(next2.getFullYear(), next2.getMonth(), holidays)
   );
 }
+
 init();
 </script>
 
