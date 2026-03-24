@@ -3,11 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>参加希望カレンダー（4月〜5月）</title>
+<title>参加希望カレンダー</title>
 
 <style>
 body { font-family: sans-serif; margin: 10px; }
-h2 { text-align: center; }
+
+.month-title {
+  font-weight: bold;
+  font-size: 18px;
+  margin: 20px 0 5px;
+}
 
 .calendar {
   display: grid;
@@ -16,17 +21,22 @@ h2 { text-align: center; }
 }
 
 .header {
-  font-weight: bold;
   text-align: center;
-  padding: 5px;
+  font-weight: bold;
   background: #f0f0f0;
+  padding: 5px;
 }
 
 .day {
   border: 1px solid #ccc;
   border-radius: 8px;
-  padding: 6px;
-  min-height: 100px;
+  min-height: 90px;
+  padding: 5px;
+}
+
+.empty {
+  background: transparent;
+  border: none;
 }
 
 .sat { background: #e0f4ff; }
@@ -37,7 +47,7 @@ h2 { text-align: center; }
 
 .names span {
   display:block;
-  font-size:12px;
+  font-size:11px;
   margin-top:2px;
   background:#e0f0ff;
   border-radius:4px;
@@ -45,9 +55,9 @@ h2 { text-align: center; }
 }
 
 button {
-  margin-top:5px;
   width:100%;
-  font-size:12px;
+  margin-top:3px;
+  font-size:11px;
 }
 </style>
 </head>
@@ -55,7 +65,7 @@ button {
 <body>
 
 <h2>参加希望カレンダー（2026年4月〜5月）</h2>
-<div id="calendar" class="calendar"></div>
+<div id="app"></div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
@@ -70,17 +80,8 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-const calendar = document.getElementById("calendar");
+const appDiv = document.getElementById("app");
 
-// 曜日ヘッダー
-["月","火","水","木","金","土","日"].forEach(day => {
-  const div = document.createElement("div");
-  div.className = "header";
-  div.textContent = day;
-  calendar.appendChild(div);
-});
-
-// 日付をローカルで生成（これが重要）
 function formatDateLocal(date) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -88,65 +89,83 @@ function formatDateLocal(date) {
   return `${y}-${m}-${d}`;
 }
 
-// 祝日取得
 async function getHolidays() {
   const res = await fetch("https://holidays-jp.github.io/api/v1/date.json");
   return await res.json();
 }
 
-async function createCalendar() {
-  const holidays = await getHolidays();
+function createMonth(year, month, holidays) {
+  const container = document.createElement("div");
 
-  // 2026年4月1日
-  const firstDay = new Date(2026, 3, 1);
+  // タイトル
+  const title = document.createElement("div");
+  title.className = "month-title";
+  title.textContent = `${year}年${month + 1}月`;
+  container.appendChild(title);
 
-  // 月曜スタートに調整
-  const start = new Date(firstDay);
-  start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+  // カレンダー
+  const cal = document.createElement("div");
+  cal.className = "calendar";
 
-  for (let i = 0; i < 70; i++) {
-    const d = new Date(start);
-    d.setDate(start.getDate() + i);
+  // 曜日ヘッダー
+  ["月","火","水","木","金","土","日"].forEach(d => {
+    const div = document.createElement("div");
+    div.className = "header";
+    div.textContent = d;
+    cal.appendChild(div);
+  });
 
-    const key = formatDateLocal(d); // ←修正ポイント
+  const firstDay = new Date(year, month, 1);
+  const lastDate = new Date(year, month + 1, 0).getDate();
+
+  // 空白（前）
+  let startOffset = (firstDay.getDay() + 6) % 7;
+  for (let i = 0; i < startOffset; i++) {
+    const empty = document.createElement("div");
+    empty.className = "day empty";
+    cal.appendChild(empty);
+  }
+
+  // 日付
+  for (let i = 1; i <= lastDate; i++) {
+    const d = new Date(year, month, i);
+    const key = formatDateLocal(d);
     const day = d.getDay();
-
-    const isSunday = day === 0;
-    const isSaturday = day === 6;
-    const isHoliday = holidays[key];
 
     const div = document.createElement("div");
     div.className = "day";
 
+    const isSun = day === 0;
+    const isSat = day === 6;
+    const isHoliday = holidays[key];
+
     if (isHoliday) {
       div.classList.add("holiday");
-    } else if (isSunday) {
+    } else if (isSun) {
       div.classList.add("sun");
-    } else if (isSaturday) {
+    } else if (isSat) {
       div.classList.add("sat");
     }
 
     div.innerHTML = `
-      <div class="date">${key}</div>
+      <div class="date">${i}</div>
       <div class="names" id="names-${key}"></div>
       <button onclick="addName('${key}')">＋参加</button>
     `;
 
-    calendar.appendChild(div);
+    cal.appendChild(div);
 
     onSnapshot(doc(db, "dates", key), (docSnap) => {
       const container = document.getElementById("names-" + key);
       container.innerHTML = "";
 
       if (docSnap.exists()) {
-        const names = docSnap.data().names || [];
-
-        names.forEach(name => {
+        docSnap.data().names.forEach(name => {
           const span = document.createElement("span");
           span.textContent = name;
 
           span.onclick = async () => {
-            if (confirm(name + " を削除しますか？")) {
+            if (confirm("削除しますか？")) {
               await updateDoc(doc(db, "dates", key), {
                 names: arrayRemove(name)
               });
@@ -158,17 +177,20 @@ async function createCalendar() {
       }
     });
   }
+
+  container.appendChild(cal);
+  return container;
 }
 
 window.addName = async function(key) {
-  const name = prompt("名前を入力してください");
+  const name = prompt("名前を入力");
   if (!name) return;
 
   const ref = doc(db, "dates", key);
   const docSnap = await getDoc(ref);
 
   if (docSnap.exists() && docSnap.data().names?.includes(name)) {
-    alert("すでに登録されています");
+    alert("登録済み");
     return;
   }
 
@@ -177,7 +199,14 @@ window.addName = async function(key) {
   }, { merge: true });
 };
 
-createCalendar();
+async function init() {
+  const holidays = await getHolidays();
+
+  appDiv.appendChild(createMonth(2026, 3, holidays)); // 4月
+  appDiv.appendChild(createMonth(2026, 4, holidays)); // 5月
+}
+
+init();
 </script>
 
 </body>
