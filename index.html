@@ -79,19 +79,19 @@ const db = getFirestore(app);
 
 const appDiv = document.getElementById("app");
 
-// 名前取得
+// 👇 名前保存
 let myName = localStorage.getItem("myName");
 if (!myName) {
   myName = prompt("名前を入力してください");
   if (myName) localStorage.setItem("myName", myName);
 }
 
-// 🔥 文字正規化（ここが重要）
+// 🔥 正規化（ズレ完全対策）
 function normalize(str) {
   return str
-    .normalize("NFKC") // 全角半角統一
-    .replace(/\s/g, "") // 空白削除
-    .toLowerCase(); // 小文字化
+    .normalize("NFKC")   // 全角半角統一
+    .replace(/\s/g, "")  // 空白削除
+    .toLowerCase();      // 小文字
 }
 
 // 日付フォーマット
@@ -167,8 +167,12 @@ function createMonth(year, month, holidays) {
           span.textContent = name;
 
           span.onclick = async () => {
-            // 🔥 改良判定
-            if (!normalize(name).includes(normalize(myName))) {
+
+            const n1 = normalize(name);
+            const n2 = normalize(myName);
+
+            // 🔥 双方向一致（どちらか含めばOK）
+            if (!(n1.includes(n2) || n2.includes(n1))) {
               alert("自分の名前だけ削除できます");
               return;
             }
