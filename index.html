@@ -79,27 +79,28 @@ const db = getFirestore(app);
 
 const appDiv = document.getElementById("app");
 
-// 👇 名前保存
+// 名前保存
 let myName = localStorage.getItem("myName");
 if (!myName) {
   myName = prompt("名前を入力してください");
   if (myName) localStorage.setItem("myName", myName);
 }
 
-// 🔥 正規化（ズレ完全対策）
+// 🔥 超強力正規化
 function normalize(str) {
   return str
-    .normalize("NFKC")   // 全角半角統一
-    .replace(/\s/g, "")  // 空白削除
-    .toLowerCase();      // 小文字
+    .normalize("NFKC")
+    .replace(/[\s\u200B-\u200D\uFEFF]/g, "") // 不可視文字削除
+    .replace(/[△▲▵▴]/g, "") // ← 三角系削除
+    .toLowerCase();
 }
 
-// 日付フォーマット
+// 日付
 function formatDateLocal(date) {
   return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
 }
 
-// 祝日取得
+// 祝日
 async function getHolidays() {
   const res = await fetch("https://holidays-jp.github.io/api/v1/date.json");
   return await res.json();
@@ -163,6 +164,7 @@ function createMonth(year, month, holidays) {
 
       if (docSnap.exists()) {
         docSnap.data().names.forEach(name => {
+
           const span = document.createElement("span");
           span.textContent = name;
 
@@ -171,8 +173,8 @@ function createMonth(year, month, holidays) {
             const n1 = normalize(name);
             const n2 = normalize(myName);
 
-            // 🔥 双方向一致（どちらか含めばOK）
-            if (!(n1.includes(n2) || n2.includes(n1))) {
+            // 🔥 完全一致で安全判定
+            if (n1 !== n2) {
               alert("自分の名前だけ削除できます");
               return;
             }
