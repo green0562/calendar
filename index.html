@@ -1,4 +1,4 @@
-```html
+
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -164,5 +164,74 @@ function createMonth(year, month, holidays) {
       container.innerHTML = "";
 
       if (docSnap.exists()) {
-        docSnap.
-```
+        docSnap.data().names.forEach(name => {
+          const span = document.createElement("span");
+          span.textContent = name;
+
+          span.onclick = async () => {
+
+            const n1 = cleanName(name);
+            const n2 = cleanName(myName);
+
+            // 🔥 完全一致のみ許可
+            if (n1 !== n2) {
+              alert("自分の名前だけ削除できます");
+              return;
+            }
+
+            if (confirm("削除しますか？")) {
+              await updateDoc(doc(db, "dates", key), {
+                names: arrayRemove(name)
+              });
+            }
+          };
+
+          container.appendChild(span);
+        });
+      }
+    });
+  }
+
+  container.appendChild(cal);
+  return container;
+}
+
+window.addName = async function(key) {
+  const name = prompt("名前を入力");
+  if (!name) return;
+
+  const ref = doc(db, "dates", key);
+  const docSnap = await getDoc(ref);
+
+  if (docSnap.exists() && docSnap.data().names?.includes(name)) {
+    alert("登録済み");
+    return;
+  }
+
+  await setDoc(ref, {
+    names: arrayUnion(name)
+  }, { merge: true });
+};
+
+async function init() {
+  const holidays = await getHolidays();
+
+  const today = new Date();
+  const y = today.getFullYear();
+  const m = today.getMonth();
+
+  appDiv.appendChild(createMonth(y, m, holidays));
+
+  const next1 = new Date(y, m + 1, 1);
+  appDiv.appendChild(createMonth(next1.getFullYear(), next1.getMonth(), holidays));
+
+  const next2 = new Date(y, m + 2, 1);
+  appDiv.appendChild(createMonth(next2.getFullYear(), next2.getMonth(), holidays));
+}
+
+init();
+</script>
+
+</body>
+</html>
+
