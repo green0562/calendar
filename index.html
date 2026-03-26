@@ -168,24 +168,25 @@ function createMonth(year, month, holidays) {
           const span = document.createElement("span");
           span.textContent = name;
 
-          span.onclick = async () => {
+        span.onclick = async () => {
 
-            const n1 = cleanName(name);
-            const n2 = cleanName(myName);
+  const inputName = prompt("削除する名前を入力してください");
+  if (!inputName) return;
 
-            // 🔥 完全一致のみ許可
-            if (n1 !== n2) {
-              alert("自分の名前だけ削除できます");
-              return;
-            }
+  const n1 = cleanName(name);
+  const n2 = cleanName(inputName);
 
-            if (confirm("削除しますか？")) {
-              await updateDoc(doc(db, "dates", key), {
-                names: arrayRemove(name)
-              });
-            }
-          };
+  if (n1 !== n2) {
+    alert("一致しません");
+    return;
+  }
 
+  if (confirm("削除しますか？")) {
+    await updateDoc(doc(db, "dates", key), {
+      names: arrayRemove(name)
+    });
+  }
+};
           container.appendChild(span);
         });
       }
