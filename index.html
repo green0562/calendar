@@ -34,10 +34,7 @@ body { font-family: sans-serif; margin: 10px; }
   padding: 5px;
 }
 
-.empty {
-  background: transparent;
-  border: none;
-}
+.empty { border: none; }
 
 .sat { background: #e0f4ff; }
 .sun { background: #ffe6ea; }
@@ -82,22 +79,24 @@ const db = getFirestore(app);
 
 const appDiv = document.getElementById("app");
 
-// 👇 自分の名前を保存（最初だけ入力）
+// 名前取得
 let myName = localStorage.getItem("myName");
-
 if (!myName) {
-  myName = prompt("最初にあなたの名前を入力してください");
-  if (myName) {
-    localStorage.setItem("myName", myName);
-  }
+  myName = prompt("名前を入力してください");
+  if (myName) localStorage.setItem("myName", myName);
 }
 
-// 日付フォーマット（ズレ防止）
+// 🔥 文字正規化（ここが重要）
+function normalize(str) {
+  return str
+    .normalize("NFKC") // 全角半角統一
+    .replace(/\s/g, "") // 空白削除
+    .toLowerCase(); // 小文字化
+}
+
+// 日付フォーマット
 function formatDateLocal(date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
+  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
 }
 
 // 祝日取得
@@ -139,20 +138,16 @@ function createMonth(year, month, holidays) {
     const key = formatDateLocal(d);
     const day = d.getDay();
 
+    const div = document.createElement("div");
+    div.className = "day";
+
     const isSun = day === 0;
     const isSat = day === 6;
     const isHoliday = holidays[key];
 
-    const div = document.createElement("div");
-    div.className = "day";
-
-    if (isHoliday) {
-      div.classList.add("holiday");
-    } else if (isSun) {
-      div.classList.add("sun");
-    } else if (isSat) {
-      div.classList.add("sat");
-    }
+    if (isHoliday) div.classList.add("holiday");
+    else if (isSun) div.classList.add("sun");
+    else if (isSat) div.classList.add("sat");
 
     div.innerHTML = `
       <div class="date">${i}</div>
@@ -171,9 +166,9 @@ function createMonth(year, month, holidays) {
           const span = document.createElement("span");
           span.textContent = name;
 
-          // 👇 自分の名前だけ削除可能
           span.onclick = async () => {
-            if (name !== myName) {
+            // 🔥 改良判定
+            if (!normalize(name).includes(normalize(myName))) {
               alert("自分の名前だけ削除できます");
               return;
             }
@@ -216,23 +211,16 @@ async function init() {
   const holidays = await getHolidays();
 
   const today = new Date();
-  const year = today.getFullYear();
-  const month = today.getMonth();
+  const y = today.getFullYear();
+  const m = today.getMonth();
 
-  // 今月
-  appDiv.appendChild(createMonth(year, month, holidays));
+  appDiv.appendChild(createMonth(y, m, holidays));
 
-  // 翌月
-  const next1 = new Date(year, month + 1, 1);
-  appDiv.appendChild(
-    createMonth(next1.getFullYear(), next1.getMonth(), holidays)
-  );
+  const next1 = new Date(y, m + 1, 1);
+  appDiv.appendChild(createMonth(next1.getFullYear(), next1.getMonth(), holidays));
 
-  // 翌々月
-  const next2 = new Date(year, month + 2, 1);
-  appDiv.appendChild(
-    createMonth(next2.getFullYear(), next2.getMonth(), holidays)
-  );
+  const next2 = new Date(y, m + 2, 1);
+  appDiv.appendChild(createMonth(next2.getFullYear(), next2.getMonth(), holidays));
 }
 
 init();
