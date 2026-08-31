@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>参加者カレンダー</title>
+
+<style>
+body { font-family: sans-serif; margin: 10px; }
+h2 { text-align: center; }
+
+.calendar {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 5px;
+}
+
+.header {
+  font-weight: bold;
+  text-align: center;
+  padding: 5px;
+  background: #f0f0f0;
+}
+
+.day {
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  padding: 6px;
+  min-height: 100px;
+}
+
+.sat { background: #e0f4ff; }
+.sun { background: #ffe6ea; }
+.holiday { background: #ffe6ea; }
+
+.date { font-size: 12px; font-weight: bold; }
+
+.names span {
+  display:block;
+  font-size:12px;
+  margin-top:2px;
+  background:#e0f0ff;
+  border-radius:4px;
+  padding:2px;
+}
+
+button {
+  margin-top:5px;
+  width:100%;
+  font-size:12px;
+}
+
+.name-form {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+}
+.name-input {
+  box-sizing: border-box;
+  min-width: 0;
+  width: 100%;
+  font-size: 16px;
+  padding: 7px 6px;
+  border: 1px solid #aaa;
+  border-radius: 4px;
+  background: #fff;
+  color: #222;
+  -webkit-appearance: none;
+}
+.name-submit,
+.name-cancel {
+  width: auto;
+  min-width: 44px;
+  margin-top: 0;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.blank {
+  visibility: hidden;
+  border: none;
+}
+</style>
+</head>
+
+<body>
+
+<h2 id="monthTitle"></h2>
+<div id="calendar" class="calendar"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
+import { getFirestore, doc, setDoc, updateDoc, onSnapshot, getDoc, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAeqz0DS20ux7MWpmXrQA5x3rZ4KysrET8",
+  authDomain: "triangle-29fbf.firebaseapp.com",
+  projectId: "triangle-29fbf",
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+const calendar = document.getElementById("calendar");
+
+// 曜日ヘッダー
+["月","火","水","木","金","土","日"].forEach(day => {
+  const div = document.createElement("div");
+  div.className = "header";
+  div.textContent = day;
+  calendar.appendChild(div);
+});
+
+// 日付をローカルで生成（これが重要）
+function formatDateLocal(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+// 祝日取得
+async function getHolidays() {
+  const res = await fetch("https://holidays-jp.github.io/api/v1/date.json");
+  return await res.json();
+}
+
+async function createCalendar() {
+  const holidays = await getHolidays();
+
+  // 今月の1日を基準に表示
+  const today = new Date();
+  const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+
+  // 月表示
+  document.getElementById("monthTitle").textContent =
+    `${firstDay.getMonth() + 1}月`;
+
+  // 月曜スタートに調整
+  const start = new Date(firstDay);
+
+  const daysInMonth = new Date(firstDay.getFullYear(), firstDay.getMonth() + 1, 0).getDate();
+
+  // 月初の曜日に合わせて空白セルを追加（月曜始まり）
+  const firstWeekday = (firstDay.getDay() + 6) % 7;
+  for (let i = 0; i < firstWeekday; i++) {
+    const blank = document.createElement("div");
+    blank.className = "day blank";
+    calendar.appendChild(blank);
+  }
+
+  for (let i = 0; i < daysInMonth; i++) {
+    const d = new Date(start);
+    d.setDate(1 + i);
+
+    const key = formatDateLocal(d); // ←修正ポイント
+    const day = d.getDay();
+
+    const isSunday = day === 0;
+    const isSaturday = day === 6;
+    const isHoliday = holidays[key];
+
+    const div = document.createElement("div");
+    div.className = "day";
+
+    if (isHoliday) {
+      div.classList.add("holiday");
+    } else if (isSunday) {
+      div.classList.add("sun");
+    } else if (isSaturday) {
+      div.classList.add("sat");
+    }
+
+    div.innerHTML = `
+      <div class="date">${d.getDate()}</div>
+      <div class="names" id="names-${key}"></div>
+      <button class="add-button" data-date="${key}">参加</button>
+    `;
+
+    calendar.appendChild(div);
+
+    const addButton = div.querySelector(".add-button");
+    addButton.addEventListener("click", () => {
+      const existing = div.querySelector(".name-form");
+      if (existing) {
+        existing.querySelector(".name-input").focus();
+        return;
+      }
+
+      const form = document.createElement("div");
+      form.className = "name-form";
+      form.innerHTML = `
+        <input class="name-input" type="text" maxlength="30"
+               placeholder="名前を入力" autocomplete="name" enterkeyhint="done">
+        <button type="button" class="name-submit">登録</button>
+        <button type="button" class="name-cancel">取消</button>
+      `;
+      div.appendChild(form);
+
+      const input = form.querySelector(".name-input");
+      const submit = form.querySelector(".name-submit");
+      const cancel = form.querySelector(".name-cancel");
+
+      const submitName = async () => {
+        const name = input.value.trim();
+        if (!name) {
+          input.focus();
+          return;
+        }
+
+        submit.disabled = true;
+        try {
+          await addName(key, name);
+          form.remove();
+        } catch (error) {
+          console.error(error);
+          alert("登録できませんでした。通信状態とFirebaseの設定を確認してください。");
+          submit.disabled = false;
+          input.focus();
+        }
+      };
+
+      submit.addEventListener("click", submitName);
+      cancel.addEventListener("click", () => form.remove());
+      input.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") submitName();
+        if (event.key === "Escape") form.remove();
+      });
+
+      requestAnimationFrame(() => input.focus());
+    });
+
+    onSnapshot(doc(db, "dates", key), (docSnap) => {
+      const container = document.getElementById("names-" + key);
+      container.innerHTML = "";
+
+      if (docSnap.exists()) {
+        const names = docSnap.data().names || [];
+
+        names.forEach(name => {
+          const span = document.createElement("span");
+          span.textContent = name;
+
+          span.onclick = async () => {
+            if (confirm(name + " さんを削除しますか？")) {
+              await updateDoc(doc(db, "dates", key), {
+                names: arrayRemove(name)
+              });
+            }
+          };
+
+          container.appendChild(span);
+        });
+      }
+    });
+  }
+}
+
+async function addName(key, name) {
+  name = name.trim();
+  if (!name) return;
+
+  const ref = doc(db, "dates", key);
+  const docSnap = await getDoc(ref);
+
+  if (docSnap.exists() && docSnap.data().names?.includes(name)) {
+    alert("この名前はすでに登録されています。");
+    return;
+  }
+
+  await setDoc(ref, {
+    names: arrayUnion(name)
+  }, { merge: true });
+};
+
+createCalendar();
+</script>
+
+</body>
+</html>
