@@ -3,11 +3,31 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>参加者カレンダー</title>
+<title>TORA カレンダー</title>
 
 <style>
 body { font-family: sans-serif; margin: 10px; }
-h2 { text-align: center; }
+
+.month-nav {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.month-nav h2 {
+  margin: 0;
+  min-width: 70px;
+  text-align: center;
+}
+
+.month-nav button {
+  width: auto;
+  margin: 0;
+  padding: 6px 12px;
+  font-size: 14px;
+}
 
 .calendar {
   display: grid;
@@ -27,13 +47,14 @@ h2 { text-align: center; }
   border-radius: 8px;
   padding: 6px;
   min-height: 100px;
+  box-sizing: border-box;
 }
 
 .sat { background: #e0f4ff; }
 .sun { background: #ffe6ea; }
 .holiday { background: #ffe6ea; }
 
-.date { font-size: 12px; font-weight: bold; }
+.date { font-size: 16px; font-weight: bold; }
 
 .names span {
   display:block;
@@ -42,9 +63,10 @@ h2 { text-align: center; }
   background:#e0f0ff;
   border-radius:4px;
   padding:2px;
+  cursor:pointer;
 }
 
-button {
+.add-button {
   margin-top:5px;
   width:100%;
   font-size:12px;
@@ -55,6 +77,7 @@ button {
   gap: 4px;
   margin-top: 6px;
 }
+
 .name-input {
   box-sizing: border-box;
   min-width: 0;
@@ -67,6 +90,7 @@ button {
   color: #222;
   -webkit-appearance: none;
 }
+
 .name-submit,
 .name-cancel {
   width: auto;
@@ -80,17 +104,32 @@ button {
   visibility: hidden;
   border: none;
 }
+
+@media (max-width: 600px) {
+  .day { min-height: 85px; padding: 4px; }
+  .date { font-size: 14px; }
+  .names span { font-size: 11px; }
+  .month-nav button { padding: 6px 9px; }
+}
 </style>
 </head>
 
 <body>
 
-<h2 id="monthTitle"></h2>
+<div class="month-nav">
+  <button id="prevMonth">‹ 前月</button>
+  <h2 id="monthTitle"></h2>
+  <button id="nextMonth">次月 ›</button>
+</div>
+
 <div id="calendar" class="calendar"></div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
-import { getFirestore, doc, setDoc, updateDoc, onSnapshot, getDoc, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+import {
+  getFirestore, doc, setDoc, updateDoc, onSnapshot,
+  getDoc, arrayUnion, arrayRemove
+} from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAeqz0DS20ux7MWpmXrQA5x3rZ4KysrET8",
@@ -102,16 +141,12 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 const calendar = document.getElementById("calendar");
+const monthTitle = document.getElementById("monthTitle");
 
-// 曜日ヘッダー
-["月","火","水","木","金","土","日"].forEach(day => {
-  const div = document.createElement("div");
-  div.className = "header";
-  div.textContent = day;
-  calendar.appendChild(div);
-});
+let displayDate = new Date();
+displayDate = new Date(displayDate.getFullYear(), displayDate.getMonth(), 1);
+let unsubscribeList = [];
 
-// 日付をローカルで生成（これが重要）
 function formatDateLocal(date) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -119,29 +154,89 @@ function formatDateLocal(date) {
   return `${y}-${m}-${d}`;
 }
 
-// 祝日取得
 async function getHolidays() {
   const res = await fetch("https://holidays-jp.github.io/api/v1/date.json");
   return await res.json();
 }
 
+function clearListeners() {
+  unsubscribeList.forEach(unsubscribe => unsubscribe());
+  unsubscribeList = [];
+}
+
+function addNameForm(div, key) {
+  const existing = div.querySelector(".name-form");
+  if (existing) {
+    existing.querySelector(".name-input").focus();
+    return;
+  }
+
+  const form = document.createElement("div");
+  form.className = "name-form";
+  form.innerHTML = `
+    <input class="name-input" type="text" maxlength="30"
+           placeholder="名前を入力" autocomplete="name" enterkeyhint="done">
+    <button type="button" class="name-submit">登録</button>
+    <button type="button" class="name-cancel">取消</button>
+  `;
+  div.appendChild(form);
+
+  const input = form.querySelector(".name-input");
+  const submit = form.querySelector(".name-submit");
+  const cancel = form.querySelector(".name-cancel");
+
+  const submitName = async () => {
+    const name = input.value.trim();
+    if (!name) {
+      input.focus();
+      return;
+    }
+
+    submit.disabled = true;
+    try {
+      await addName(key, name);
+      form.remove();
+    } catch (error) {
+      console.error(error);
+      alert("登録できませんでした。通信状態とFirebaseの設定を確認してください。");
+      submit.disabled = false;
+      input.focus();
+    }
+  };
+
+  submit.addEventListener("click", submitName);
+  cancel.addEventListener("click", () => form.remove());
+  input.addEventListener("keydown", event => {
+    if (event.key === "Enter") submitName();
+    if (event.key === "Escape") form.remove();
+  });
+
+  requestAnimationFrame(() => input.focus());
+}
+
 async function createCalendar() {
+  clearListeners();
+  calendar.innerHTML = "";
+
   const holidays = await getHolidays();
 
-  // 今月の1日を基準に表示
-  const today = new Date();
-  const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+  const year = displayDate.getFullYear();
+  const month = displayDate.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-  // 月表示
-  document.getElementById("monthTitle").textContent =
-    `${firstDay.getMonth() + 1}月`;
+  // 「8月」「9月」のように月だけ表示
+  monthTitle.textContent = `${month + 1}月`;
 
-  // 月曜スタートに調整
-  const start = new Date(firstDay);
+  // 曜日（月曜始まり）
+  ["月","火","水","木","金","土","日"].forEach(day => {
+    const div = document.createElement("div");
+    div.className = "header";
+    div.textContent = day;
+    calendar.appendChild(div);
+  });
 
-  const daysInMonth = new Date(firstDay.getFullYear(), firstDay.getMonth() + 1, 0).getDate();
-
-  // 月初の曜日に合わせて空白セルを追加（月曜始まり）
+  // 月初までの空白（月曜始まり）
   const firstWeekday = (firstDay.getDay() + 6) % 7;
   for (let i = 0; i < firstWeekday; i++) {
     const blank = document.createElement("div");
@@ -150,88 +245,36 @@ async function createCalendar() {
   }
 
   for (let i = 0; i < daysInMonth; i++) {
-    const d = new Date(start);
-    d.setDate(1 + i);
-
-    const key = formatDateLocal(d); // ←修正ポイント
+    const d = new Date(year, month, i + 1);
+    const key = formatDateLocal(d);
     const day = d.getDay();
-
-    const isSunday = day === 0;
-    const isSaturday = day === 6;
-    const isHoliday = holidays[key];
 
     const div = document.createElement("div");
     div.className = "day";
 
-    if (isHoliday) {
+    if (holidays[key]) {
       div.classList.add("holiday");
-    } else if (isSunday) {
+    } else if (day === 0) {
       div.classList.add("sun");
-    } else if (isSaturday) {
+    } else if (day === 6) {
       div.classList.add("sat");
     }
 
     div.innerHTML = `
       <div class="date">${d.getDate()}</div>
       <div class="names" id="names-${key}"></div>
-      <button class="add-button" data-date="${key}">参加</button>
+      <button class="add-button" type="button">参加</button>
     `;
 
     calendar.appendChild(div);
 
-    const addButton = div.querySelector(".add-button");
-    addButton.addEventListener("click", () => {
-      const existing = div.querySelector(".name-form");
-      if (existing) {
-        existing.querySelector(".name-input").focus();
-        return;
-      }
-
-      const form = document.createElement("div");
-      form.className = "name-form";
-      form.innerHTML = `
-        <input class="name-input" type="text" maxlength="30"
-               placeholder="名前を入力" autocomplete="name" enterkeyhint="done">
-        <button type="button" class="name-submit">登録</button>
-        <button type="button" class="name-cancel">取消</button>
-      `;
-      div.appendChild(form);
-
-      const input = form.querySelector(".name-input");
-      const submit = form.querySelector(".name-submit");
-      const cancel = form.querySelector(".name-cancel");
-
-      const submitName = async () => {
-        const name = input.value.trim();
-        if (!name) {
-          input.focus();
-          return;
-        }
-
-        submit.disabled = true;
-        try {
-          await addName(key, name);
-          form.remove();
-        } catch (error) {
-          console.error(error);
-          alert("登録できませんでした。通信状態とFirebaseの設定を確認してください。");
-          submit.disabled = false;
-          input.focus();
-        }
-      };
-
-      submit.addEventListener("click", submitName);
-      cancel.addEventListener("click", () => form.remove());
-      input.addEventListener("keydown", (event) => {
-        if (event.key === "Enter") submitName();
-        if (event.key === "Escape") form.remove();
-      });
-
-      requestAnimationFrame(() => input.focus());
+    div.querySelector(".add-button").addEventListener("click", () => {
+      addNameForm(div, key);
     });
 
-    onSnapshot(doc(db, "dates", key), (docSnap) => {
-      const container = document.getElementById("names-" + key);
+    const unsubscribe = onSnapshot(doc(db, "dates", key), docSnap => {
+      const container = div.querySelector(".names");
+      if (!container) return;
       container.innerHTML = "";
 
       if (docSnap.exists()) {
@@ -240,26 +283,33 @@ async function createCalendar() {
         names.forEach(name => {
           const span = document.createElement("span");
           span.textContent = name;
+          span.title = "タップすると削除できます";
 
           span.onclick = async () => {
-            if (confirm(name + " さんを削除しますか？")) {
-              await updateDoc(doc(db, "dates", key), {
-                names: arrayRemove(name)
-              });
+            if (confirm(`${name} さんを削除しますか？`)) {
+              try {
+                await updateDoc(doc(db, "dates", key), {
+                  names: arrayRemove(name)
+                });
+              } catch (error) {
+                console.error(error);
+                alert("削除できませんでした。通信状態とFirebaseの設定を確認してください。");
+              }
             }
           };
 
           container.appendChild(span);
         });
       }
+    }, error => {
+      console.error("Firestore読み取りエラー:", error);
     });
+
+    unsubscribeList.push(unsubscribe);
   }
 }
 
 async function addName(key, name) {
-  name = name.trim();
-  if (!name) return;
-
   const ref = doc(db, "dates", key);
   const docSnap = await getDoc(ref);
 
@@ -271,7 +321,17 @@ async function addName(key, name) {
   await setDoc(ref, {
     names: arrayUnion(name)
   }, { merge: true });
-};
+}
+
+document.getElementById("prevMonth").addEventListener("click", () => {
+  displayDate = new Date(displayDate.getFullYear(), displayDate.getMonth() - 1, 1);
+  createCalendar();
+});
+
+document.getElementById("nextMonth").addEventListener("click", () => {
+  displayDate = new Date(displayDate.getFullYear(), displayDate.getMonth() + 1, 1);
+  createCalendar();
+});
 
 createCalendar();
 </script>
